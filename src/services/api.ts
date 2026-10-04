@@ -5,38 +5,59 @@ import {
   GenerationStatus,
 } from '../types/comic';
 
-/*
- * Production:
- * VITE_API_URL=https://comiccraft-ai-a1rz.onrender.com
+/**
+ * ComicCraft API configuration
+ *
+ * Vercel:
+ *   VITE_API_BASE_URL=https://YOUR-RENDER-BACKEND.onrender.com
  *
  * Local development:
- * If VITE_API_URL is not defined, requests use /api.
+ *   VITE_API_BASE_URL=http://127.0.0.1:8000
+ *
+ * The backend already exposes /api, so this file adds /api automatically.
  */
 
-const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+const configuredApiUrl =
+  import.meta.env.VITE_API_BASE_URL?.trim() ||
+  import.meta.env.VITE_API_URL?.trim() ||
+  '';
 
-const API_BASE = configuredApiUrl
-  ? `${configuredApiUrl.replace(/\/+$/, '')}/api`
+const normalizedApiUrl = configuredApiUrl.replace(/\/+$/, '');
+
+const API_BASE = normalizedApiUrl
+  ? `${normalizedApiUrl}/api`
   : '/api';
+
+console.log('[ComicCraft] API base URL:', API_BASE);
 
 async function fetchJSON<T>(
   url: string,
-  options?: RequestInit
+  options: RequestInit = {}
 ): Promise<T> {
   let response: Response;
 
   try {
-    response = await fetch(url, options);
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: 'application/json',
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.headers || {}),
+      },
+    });
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
         : 'Unable to connect to the backend server.';
 
-    throw new Error(`Backend connection failed: ${message}`);
+    throw new Error(
+      `Backend connection failed: ${message}`
+    );
   }
 
-  const contentType = response.headers.get('content-type') || '';
+  const contentType =
+    response.headers.get('content-type') || '';
 
   if (!response.ok) {
     let errorMessage = `HTTP Error ${response.status}`;
@@ -53,21 +74,22 @@ async function fetchJSON<T>(
           errorMessage = errorData.message;
         }
       } catch {
-        // Keep the default HTTP error message.
+        // Keep default HTTP error.
       }
     } else {
       try {
         const text = await response.text();
 
         if (text.trim()) {
-          errorMessage = `HTTP ${response.status}: ${text
-            .replace(/<[^>]*>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 200)}`;
+          errorMessage =
+            `HTTP ${response.status}: ${text
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 300)}`;
         }
       } catch {
-        // Keep the default HTTP error message.
+        // Keep default HTTP error.
       }
     }
 
@@ -82,14 +104,16 @@ async function fetchJSON<T>(
         .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 200);
+        .slice(0, 300);
     } catch {
-      // Ignore body parsing errors.
+      // Ignore parsing error.
     }
 
     throw new Error(
       `Backend returned a non-JSON response.${
-        responsePreview ? ` Response: ${responsePreview}` : ''
+        responsePreview
+          ? ` Response: ${responsePreview}`
+          : ''
       }`
     );
   }
@@ -102,9 +126,9 @@ async function fetchJSON<T>(
 }
 
 export const api = {
-  // ---------------------------------------------------------------------------
-  // Health
-  // ---------------------------------------------------------------------------
+  // ============================================================
+  // HEALTH
+  // ============================================================
 
   getHealth: () =>
     fetchJSON<{
@@ -119,16 +143,13 @@ export const api = {
       image_model: string;
     }>(`${API_BASE}/health/ai`),
 
-  // ---------------------------------------------------------------------------
-  // Projects
-  // ---------------------------------------------------------------------------
+  // ============================================================
+  // PROJECTS
+  // ============================================================
 
   createProject: (payload: CreateProjectPayload) =>
     fetchJSON<Project>(`${API_BASE}/projects`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(payload),
     }),
 
@@ -153,9 +174,6 @@ export const api = {
       `${API_BASE}/projects/${encodeURIComponent(id)}`,
       {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(updates),
       }
     ),
@@ -165,6 +183,9 @@ export const api = {
       `${API_BASE}/projects/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+        },
       }
     );
 
@@ -172,6 +193,10 @@ export const api = {
       throw new Error(`HTTP Error ${response.status}`);
     }
   },
+
+  // ============================================================
+  // AI COMIC GENERATION
+  // ============================================================
 
   generateComic: (id: string) =>
     fetchJSON<Project>(
@@ -186,9 +211,9 @@ export const api = {
       `${API_BASE}/projects/${encodeURIComponent(id)}/status`
     ),
 
-  // ---------------------------------------------------------------------------
-  // Panels
-  // ---------------------------------------------------------------------------
+  // ============================================================
+  // PANELS
+  // ============================================================
 
   updatePanel: (
     projectId: string,
@@ -201,9 +226,6 @@ export const api = {
       )}/panels/${encodeURIComponent(panelId)}`,
       {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(updates),
       }
     ),
@@ -215,7 +237,9 @@ export const api = {
     fetchJSON<Panel>(
       `${API_BASE}/projects/${encodeURIComponent(
         projectId
-      )}/panels/${encodeURIComponent(panelId)}/regenerate-image`,
+      )}/panels/${encodeURIComponent(
+        panelId
+      )}/regenerate-image`,
       {
         method: 'POST',
       }
@@ -228,7 +252,9 @@ export const api = {
     fetchJSON<Panel>(
       `${API_BASE}/projects/${encodeURIComponent(
         projectId
-      )}/panels/${encodeURIComponent(panelId)}/regenerate-story`,
+      )}/panels/${encodeURIComponent(
+        panelId
+      )}/regenerate-story`,
       {
         method: 'POST',
       }
@@ -241,7 +267,9 @@ export const api = {
     fetchJSON<Panel>(
       `${API_BASE}/projects/${encodeURIComponent(
         projectId
-      )}/panels/${encodeURIComponent(panelId)}/regenerate-both`,
+      )}/panels/${encodeURIComponent(
+        panelId
+      )}/regenerate-both`,
       {
         method: 'POST',
       }
@@ -265,22 +293,26 @@ export const api = {
 
   addPanel: (projectId: string) =>
     fetchJSON<Panel>(
-      `${API_BASE}/projects/${encodeURIComponent(projectId)}/panels`,
+      `${API_BASE}/projects/${encodeURIComponent(
+        projectId
+      )}/panels`,
       {
         method: 'POST',
       }
     ),
 
-  // ---------------------------------------------------------------------------
-  // Exports
-  // ---------------------------------------------------------------------------
+  // ============================================================
+  // EXPORTS
+  // ============================================================
 
   exportPDF: (projectId: string) =>
     fetchJSON<{
       download_url: string;
       filename: string;
     }>(
-      `${API_BASE}/projects/${encodeURIComponent(projectId)}/export/pdf`,
+      `${API_BASE}/projects/${encodeURIComponent(
+        projectId
+      )}/export/pdf`,
       {
         method: 'POST',
       }
@@ -293,7 +325,9 @@ export const api = {
         filename: string;
       }[];
     }>(
-      `${API_BASE}/projects/${encodeURIComponent(projectId)}/export/png`,
+      `${API_BASE}/projects/${encodeURIComponent(
+        projectId
+      )}/export/png`,
       {
         method: 'POST',
       }
